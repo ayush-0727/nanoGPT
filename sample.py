@@ -91,16 +91,14 @@ x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 
 
 base_prompt = "The quick brown fox jumps over the lazy dog. "
-prompt = base_prompt * k   # k controls input length
 
-input_tokens = len(encode(prompt))
 results = []
 
 torch.cuda.reset_peak_memory_stats()
 
 with torch.no_grad():
     with ctx:
-        for k in [1, 5, 10, 20, 40, 80]:
+        for k in [1, 5, 10, 20, 40, 80]:     # k controls input length
             start = base_prompt * k
             x = torch.tensor(encode(start), dtype=torch.long, device=device)[None, ...]
             
