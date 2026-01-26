@@ -90,7 +90,74 @@ x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 #             print('---------------')
 
 
-base_prompt = "The quick brown fox jumps over the lazy dog. "
+# ======== Measure inference time vs input length ========
+
+# base_prompt = "The quick brown fox jumps over the lazy dog. "
+
+# results = []
+
+# torch.cuda.reset_peak_memory_stats()
+
+# with torch.no_grad():
+#     with ctx:
+#         for k in [1, 5, 10, 20, 40, 80]:     # k controls input length
+#             start = base_prompt * k
+#             x = torch.tensor(encode(start), dtype=torch.long, device=device)[None, ...]
+            
+#             torch.cuda.synchronize()
+#             start_time = time.time()
+
+#             y = model.generate(
+#                 x,
+#                 max_new_tokens,
+#                 temperature=temperature,
+#                 top_k=top_k
+#             )
+
+#             torch.cuda.synchronize()
+#             end_time = time.time()
+            
+#             total_time = end_time - start_time
+#             num_generated_tokens = y.shape[1] - x.shape[1]
+            
+#             per_token_time = total_time / num_generated_tokens
+
+#             results.append((len(x[0]), total_time, per_token_time))
+    
+#             print(decode(y[0].tolist()))
+#             print('---------------')
+
+# peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+# print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
+# print("\nInput Tokens | Total Time (s) | Time per Token (s)")
+# for input_len, total_t, per_token_t in results:
+#     print(f"{input_len:12} | {total_t:.4f}       | {per_token_t:.6f}")
+    
+# # plot the inference time vs input length
+# import matplotlib.pyplot as plt
+# input_lengths = [r[0] for r in results]
+# total_times = [r[1] for r in results]
+# per_token_times = [r[2] for r in results]
+# plt.figure(figsize=(12, 5))
+# plt.subplot(1, 2, 1)
+# plt.plot(input_lengths, total_times, marker='o')
+# plt.title('Total Inference Time vs Input Length')
+# plt.xlabel('Input Length (tokens)')
+# plt.ylabel('Total Inference Time (s)')
+# plt.subplot(1, 2, 2)
+# plt.plot(input_lengths, per_token_times, marker='o', color='orange')
+# plt.title('Per Token Inference Time vs Input Length')
+# plt.xlabel('Input Length (tokens)')
+# plt.ylabel('Per Token Inference Time (s)')
+# plt.tight_layout()
+# plt.savefig('inference_time_vs_input_length.png')
+
+# -----------------------------------------------------------------------------
+
+
+# ======== Measure inference time vs output length ========
+fixed_prompt = "Explain transformers in simple terms."
+x = torch.tensor(encode(fixed_prompt), dtype=torch.long, device=device)[None, ...]
 
 results = []
 
@@ -98,16 +165,13 @@ torch.cuda.reset_peak_memory_stats()
 
 with torch.no_grad():
     with ctx:
-        for k in [1, 5, 10, 20, 40, 80]:     # k controls input length
-            start = base_prompt * k
-            x = torch.tensor(encode(start), dtype=torch.long, device=device)[None, ...]
-            
+        for out_len in [50, 100, 200, 400, 800]:     # out_len controls output length
             torch.cuda.synchronize()
             start_time = time.time()
 
             y = model.generate(
                 x,
-                max_new_tokens,
+                max_new_tokens=out_len,
                 temperature=temperature,
                 top_k=top_k
             )
@@ -120,32 +184,33 @@ with torch.no_grad():
             
             per_token_time = total_time / num_generated_tokens
 
-            results.append((len(x[0]), total_time, per_token_time))
+            results.append((out_len, total_time, per_token_time))
     
             print(decode(y[0].tolist()))
             print('---------------')
-
+    
 peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
 print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
-print("\nInput Tokens | Total Time (s) | Time per Token (s)")
-for input_len, total_t, per_token_t in results:
-    print(f"{input_len:12} | {total_t:.4f}       | {per_token_t:.6f}")
+print("\nOutput Tokens | Total Time (s) | Time per Token (s)")
+for out_len, total_t, per_token_t in results:
+    print(f"{out_len:12} | {total_t:.4f}       | {per_token_t:.6f}")
     
-# plot the inference time vs input length
+# plot the inference time vs output length
 import matplotlib.pyplot as plt
-input_lengths = [r[0] for r in results]
+output_lengths = [r[0] for r in results]
 total_times = [r[1] for r in results]
 per_token_times = [r[2] for r in results]
 plt.figure(figsize=(12, 5))
 plt.subplot(1, 2, 1)
-plt.plot(input_lengths, total_times, marker='o')
-plt.title('Total Inference Time vs Input Length')
-plt.xlabel('Input Length (tokens)')
+plt.plot(output_lengths, total_times, marker='o')
+plt.title('Total Inference Time vs Output Length')
+plt.xlabel('Output Length (tokens)')
 plt.ylabel('Total Inference Time (s)')
 plt.subplot(1, 2, 2)
-plt.plot(input_lengths, per_token_times, marker='o', color='orange')
-plt.title('Per Token Inference Time vs Input Length')
-plt.xlabel('Input Length (tokens)')
+plt.plot(output_lengths, per_token_times, marker='o', color='orange')
+plt.title('Per Token Inference Time vs Output Length')
+plt.xlabel('Output Length (tokens)')
 plt.ylabel('Per Token Inference Time (s)')
 plt.tight_layout()
-plt.savefig('inference_time_vs_input_length.png')
+plt.savefig('inference_time_vs_output_length.png')
+# -----------------------------------------------------------------------------
