@@ -104,7 +104,7 @@ with torch.no_grad():
 
         torch.cuda.synchronize()
         end_time = time.time()
-        print(decode(y.tolist()))
+        print(decode(y[0].tolist()))
         print('---------------')
 
 total_time = end_time - start_time
