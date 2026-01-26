@@ -111,4 +111,5 @@ total_time = end_time - start_time
 num_generated_tokens = y.shape[1] - x.shape[1]
 
 print(f"\n\nTotal inference time: {total_time:.4f} sec")
+print(f"Number of generated tokens: {num_generated_tokens}")
 print(f"Time per generated token: {total_time / num_generated_tokens:.6f} sec/token")
