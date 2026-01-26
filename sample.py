@@ -89,6 +89,7 @@ x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 #             print(decode(y[0].tolist()))
 #             print('---------------')
 
+torch.cuda.reset_peak_memory_stats()
 
 with torch.no_grad():
     with ctx:
@@ -113,3 +114,5 @@ num_generated_tokens = y.shape[1] - x.shape[1]
 print(f"\n\nTotal inference time: {total_time:.4f} sec")
 print(f"Number of generated tokens: {num_generated_tokens}")
 print(f"Time per generated token: {total_time / num_generated_tokens:.6f} sec/token")
+peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
