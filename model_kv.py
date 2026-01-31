@@ -197,6 +197,8 @@ class GPT(nn.Module):
         
         if not kvcache:
             kvcache = [None] * self.config.n_layer
+        else:
+            x = x[:, [-1], :]  # if using kvcache, only process the last token
             
         new_kvcache = []
         
@@ -342,11 +344,11 @@ class GPT(nn.Module):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
             # idx_cond shape: (B, T) where B is batch size, T is sequence length
-            if kvcache is None:
-                idx_cond = idx_cond
-            else:
-                # only feed in the last token and use the kv cache for the rest
-                idx_cond = idx_cond[:, -1:]
+            # if kvcache is None:
+            #     idx_cond = idx_cond
+            # else:
+            #     # only feed in the last token and use the kv cache for the rest
+            #     idx_cond = idx_cond[:, -1:]
             
             # forward the model to get the logits for the index in the sequence
             # Calling self(idx) invokes the __call__() method inherited from torch.nn.Module. 
