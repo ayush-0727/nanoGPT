@@ -87,30 +87,22 @@ start_ids = encode(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 
 # run generation
+torch.cuda.reset_peak_memory_stats()
 with torch.no_grad():
     with ctx:
+        torch.cuda.synchronize()
         start = time.time_ns()
         for k in range(num_samples):
             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            # POC - batch inference works
-            print("Gen 1\n*****\n")
             print(decode(y[0].tolist()))
-            print("Gen length -", len(y[0].tolist()))
-            print("Gen 2\n*****\n")
-            print(decode(y[1].tolist()))
-            print("Gen length -", len(y[1].tolist()))
+            print("\n\nGen length -", len(y[0].tolist()))
             print('---------------')
-        end = time.time_ns()
+            torch.cuda.synchronize()
+            end = time.time_ns()
 
-print(f'{(end-start)/1_000_000}ms')
-
-# run generation
-# with torch.no_grad():
-#     with ctx:
-#         for k in range(num_samples):
-#             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-#             print(decode(y[0].tolist()))
-#             print('---------------')
+print(f'Time taken: {(end-start)/1_000_000}ms')
+peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
 
 
 # ======== Measure inference time vs input length ========
