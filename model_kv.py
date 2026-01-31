@@ -351,7 +351,7 @@ class GPT(nn.Module):
             # forward the model to get the logits for the index in the sequence
             # Calling self(idx) invokes the __call__() method inherited from torch.nn.Module. 
             # PyTorch’s __call__() method wraps and automatically executes the user-defined forward() function
-            logits, _, kvcache = self(idx_cond, kvcache)  # logits and loss are returned, we only need logits here. logits shape: (B, T, C) where B is batch size, T is sequence length, C is vocab size
+            logits, _, kvcache = self(idx_cond, kvcache=kvcache)  # logits and loss are returned, we only need logits here. logits shape: (B, T, C) where B is batch size, T is sequence length, C is vocab size
             # pluck the logits at the final step and scale by desired temperature
             logits = logits[:, -1, :] / temperature
             # optionally crop the logits to only the top k options
