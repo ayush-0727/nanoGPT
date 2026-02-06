@@ -8,7 +8,7 @@ import torch
 import tiktoken
 import time
 
-from model import GPTConfig, GPT
+from model_partc import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
 init_from = 'resume'

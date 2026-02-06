@@ -86,7 +86,7 @@ if start.startswith('FILE:'):
 start_ids = encode(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
     
-# run generation
+# # run generation
 # torch.cuda.reset_peak_memory_stats()
 # with torch.no_grad():
 #     with ctx:
