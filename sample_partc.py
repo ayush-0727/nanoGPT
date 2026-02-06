@@ -8,8 +8,7 @@ import torch
 import tiktoken
 import time
 
-# from model_partc import GPTConfig, GPT
-from model_kv import GPTConfig, GPT
+from model_partc import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
 init_from = 'resume'
@@ -115,8 +114,8 @@ with torch.no_grad():
             x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, :]
             xes.append(x)
 
-        output = model.generate(   #generate_batch_with_radix
-            idx=xes,
+        output = model.generate_batch_with_radix(
+            batch_prompts=xes,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_k=top_k,
