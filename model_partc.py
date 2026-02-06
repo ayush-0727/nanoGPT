@@ -137,82 +137,99 @@ class GPTConfig:
 # ==============================================================================
 class RadixNode:
     def __init__(self, tokens=()):
-        self.tokens = tokens                  # tuple[int]
-        self.children = {}                    # token -> RadixNode
-        self.kv_cache = None                  # list[(k, v)] or None
+        self.tokens = tuple(tokens)          # tuple[int]
+        self.children = {}                   # token -> RadixNode
+        self.kv = None                       # List[(K, V)] per layer
 
 
 class RadixTree:
     def __init__(self):
         self.root = RadixNode()
 
-    def longest_prefix(self, tokens):
+    @staticmethod
+    def _lcp(a, b):
+        i = 0
+        while i < len(a) and i < len(b) and a[i] == b[i]:
+            i += 1
+        return i
+
+    def find_longest_prefix(self, tokens):
         """
         Returns:
-        - node: deepest node with KV cache
-        - matched_len: number of tokens matched
+          matched_len, list_of_nodes_along_path
         """
         node = self.root
-        matched = 0
-        last_cached = (node, 0)
-
         i = 0
+        path = []
+
         while i < len(tokens):
-            tok = tokens[i]
-            if tok not in node.children:
+            t = tokens[i]
+            if t not in node.children:
                 break
 
-            child = node.children[tok]
-            edge = child.tokens
-            if tokens[i:i+len(edge)] != list(edge):
+            child = node.children[t]
+            p = self._lcp(child.tokens, tokens[i:])
+
+            if p == 0:
                 break
 
-            i += len(edge)
+            path.append((child, p))
+            i += p
             node = child
 
-            if node.kv_cache is not None:
-                last_cached = (node, i)
+            if p < len(child.tokens):
+                break
 
-        return last_cached
+        return i, path
 
-    def insert(self, tokens, kv_cache):
+    def insert(self, tokens, kv):
         node = self.root
         i = 0
 
         while i < len(tokens):
-            tok = tokens[i]
-            if tok not in node.children:
-                new = RadixNode(tuple(tokens[i:]))
-                new.kv_cache = kv_cache
-                node.children[tok] = new
+            t = tokens[i]
+
+            if t not in node.children:
+                new = RadixNode(tokens[i:])
+                new.kv = kv
+                node.children[t] = new
                 return
 
-            child = node.children[tok]
-            edge = child.tokens
+            child = node.children[t]
+            p = self._lcp(child.tokens, tokens[i:])
 
-            # find LCP
-            j = 0
-            while j < len(edge) and i + j < len(tokens) and edge[j] == tokens[i + j]:
-                j += 1
-
-            if j == len(edge):
+            if p == len(child.tokens):
                 node = child
-                i += j
-            else:
-                # split edge
-                mid = RadixNode(edge[:j])
-                node.children[tok] = mid
+                i += p
+                continue
 
-                child.tokens = edge[j:]
-                mid.children[child.tokens[0]] = child
+            # split
+            split = RadixNode(child.tokens[p:])
+            split.children = child.children
+            split.kv = self._slice_kv(child.kv, p)
 
-                if i + j < len(tokens):
-                    leaf = RadixNode(tuple(tokens[i + j:]))
-                    leaf.kv_cache = kv_cache
-                    mid.children[leaf.tokens[0]] = leaf
-                else:
-                    mid.kv_cache = kv_cache
-                return
+            child.tokens = child.tokens[:p]
+            child.children = {split.tokens[0]: split}
+            child.kv = self._slice_kv(child.kv, 0)
+
+            new = RadixNode(tokens[i+p:])
+            new.kv = self._slice_kv(kv, p)
+            child.children[new.tokens[0]] = new
+            return
+
+        node.kv = kv
+
+    @staticmethod
+    def _slice_kv(kv, start):
+        """slice kv from start to end"""
+        sliced = []
+        for K, V in kv:
+            sliced.append((
+                K[:, start:, :].contiguous(),
+                V[:, start:, :].contiguous()
+            ))
+        return sliced
+
 
 # ==============================================================================
 
@@ -268,51 +285,66 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, past_kv=None, pos_offset=0):   # idx: (B,T) tensor of indices in the vocab where B is batch size, T is sequence length
+    def forward(self, idx, targets=None, kvcache=None):
+        """
+        idx: (B, T) token indices
+        kvcache: list of (K, V) per layer or None
+    
+        Returns:
+            logits: (B, T, vocab)
+            loss
+            new_kvcache
+        """
         device = idx.device
-        b, t = idx.size()
-        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        pos = torch.arange(pos_offset, pos_offset + t, dtype=torch.long, device=device) # shape (t)
-
-        # forward the GPT model itself
-        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
-        x = self.transformer.drop(tok_emb + pos_emb)    # (b, t, n_embd) where b is batch size, t is sequence length, n_embd is embedding dimension
-        
-        # Following is not relevant for radix tree Kv
-        # if not past_kv:
-        #     past_kv = [None] * self.config.n_layer
-        # else:
-        #     x = x[:, [-1], :]  # if using kvcache, only process the last token
-         
-        # Current logic assumes:
-
-        # past_kv contains KV for all previous tokens
-        # You are doing token-by-token generation
-        # You only need to run the transformer on one new token
-
-        # Above commented code is correct for autoregressive decoding, e.g.:
-        # prompt → full forward
-        # then:
-        # token₁ → forward(last token)
-        # token₂ → forward(last token)
-        
-        
+        B, T = idx.size()
+    
+        # ------------------------------------------------------------------
+        # Handle KV cache
+        # ------------------------------------------------------------------
+        if kvcache is None:
+            kvcache = [None] * self.config.n_layer
+            past_len = 0
+        else:
+            # past length inferred from cache
+            past_len = kvcache[0][0].size(1)
+            # only process last token
+            idx = idx[:, -1:]
+            T = 1
+    
+        # ------------------------------------------------------------------
+        # Token + position embeddings
+        # ------------------------------------------------------------------
+        pos = torch.arange(past_len, past_len + T, device=device)
+        tok_emb = self.transformer.wte(idx)              # (B, T, C)
+        pos_emb = self.transformer.wpe(pos)[None, :, :]  # (1, T, C)
+        x = tok_emb + pos_emb
+        x = self.transformer.drop(x)
+    
         new_kvcache = []
-        
-        for layer_idx, block in enumerate(self.transformer.h):
-            past = None if past_kv is None else past_kv[layer_idx]
-            x, layer_kvcache = block(x, past) 
-            new_kvcache.append(layer_kvcache)
-            
-        # for block in self.transformer.h:
-        #     x = block(x) 
-        
-        x = self.transformer.ln_f(x)    # final layer norm
-
-        logits = self.lm_head(x)    # (B, T, vocab_size)
-
-        return logits, new_kvcache
+    
+        # ------------------------------------------------------------------
+        # Transformer blocks
+        # ------------------------------------------------------------------
+        for block, layer_past in zip(self.transformer.h, kvcache):
+            x, layer_kv = block(x, layer_past)
+            new_kvcache.append(layer_kv)
+    
+        # ------------------------------------------------------------------
+        # Final layer norm + head
+        # ------------------------------------------------------------------
+        x = self.transformer.ln_f(x)
+        logits = self.lm_head(x)
+    
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                ignore_index=-1,
+            )
+    
+        return logits, loss, new_kvcache
+    
 
     def crop_block_size(self, block_size):
         # model surgery to decrease the block size if necessary
@@ -461,6 +493,24 @@ class GPT(nn.Module):
 
         return idx
     
+    def _concat_kv(self, kv_list):
+        """
+        kv_list: list of kv caches from radix nodes
+        """
+        out = []
+        for layer in range(self.config.n_layer):
+            Ks, Vs = [], []
+            for kv in kv_list:
+                K, V = kv[layer]
+                Ks.append(K)
+                Vs.append(V)
+            out.append((
+                torch.cat(Ks, dim=1),
+                torch.cat(Vs, dim=1)
+            ))
+        return out
+
+    
     @torch.no_grad()
     def generate_batch_with_radix(
         self,
@@ -469,79 +519,49 @@ class GPT(nn.Module):
         temperature=1.0,
         top_k=None,
     ):
+        """
+        batch_prompts: list of (1, T_i) tensors
+        """
+
         radix = RadixTree()
-        device = batch_prompts[0].device
-        results = []
+        outputs = []
 
-        for x in batch_prompts:
-            tokens = x[0].tolist()
+        for prompt in batch_prompts:
+            tokens = prompt[0].tolist()
 
-            # find longest cached prefix
-            node, matched_len = radix.longest_prefix(tokens)
-            past_kv = node.kv_cache
-            pos_offset = matched_len
+            # 1️⃣ Find shared prefix
+            matched_len, path = radix.find_longest_prefix(tokens)
 
-            # compute KV for suffix
-            if matched_len < len(tokens):
-                suffix = torch.tensor(
-                    tokens[matched_len-1:], device=device
-                )[None, :]
+            if matched_len > 0:
+                kv_prefix = self._concat_kv([n.kv for n, _ in path])
+            else:
+                kv_prefix = None
 
-                _, new_kv = self(
-                    suffix,
-                    past_kv=past_kv,
-                    pos_offset=pos_offset
-                )
+            # 2️⃣ Process remaining suffix
+            suffix = tokens[matched_len:]
+            if suffix:
+                x = torch.tensor(suffix, device=prompt.device)[None, :]
+                logits, _, new_kv = self(x, kvcache=kv_prefix)
+                radix.insert(tokens, new_kv)
+                kvcache = new_kv
+            else:
+                kvcache = kv_prefix
 
-                # concatenate KV
-                if past_kv is None:
-                    full_kv = new_kv
-                else:
-                    full_kv = [
-                        (
-                            torch.cat([past_kv[i][0], new_kv[i][0]], dim=2),
-                            torch.cat([past_kv[i][1], new_kv[i][1]], dim=2),
-                        )
-                        for i in range(len(new_kv))
-                    ]
+            idx = prompt.clone()
 
-                radix.insert(tokens, full_kv)
-                past_kv = full_kv
-                pos_offset = len(tokens)
-
-            # 3️⃣ generate tokens
-            cur_token = x[:, -1:]
-            out = tokens[:]
-
+            # 3️⃣ Generate new tokens
             for _ in range(max_new_tokens):
-                logits, new_kv = self(
-                    cur_token,
-                    past_kv=past_kv,
-                    pos_offset=pos_offset
-                )
-
+                logits, _, kvcache = self(idx[:, -1:], kvcache=kvcache)
                 logits = logits[:, -1, :] / temperature
+
                 if top_k is not None:
-                    v, _ = torch.topk(logits, top_k)
+                    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                     logits[logits < v[:, [-1]]] = -float("inf")
 
-                probs = torch.softmax(logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
+                probs = F.softmax(logits, dim=-1)
+                next_id = torch.multinomial(probs, num_samples=1)
+                idx = torch.cat([idx, next_id], dim=1)
 
-                out.append(next_token.item())
+            outputs.append(idx)
 
-                past_kv = [
-                    (
-                        torch.cat([past_kv[i][0], new_kv[i][0]], dim=2),
-                        torch.cat([past_kv[i][1], new_kv[i][1]], dim=2),
-                    )
-                    for i in range(len(new_kv))
-                ]
-
-                cur_token = next_token
-                pos_offset += 1
-
-            results.append(out)
-
-        return results
-
+        return outputs
