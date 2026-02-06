@@ -116,7 +116,7 @@ with torch.no_grad():
             xes.append(x)
 
         output = model.generate(   #generate_batch_with_radix
-            batch_prompts=xes,
+            idx=xes,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_k=top_k,
