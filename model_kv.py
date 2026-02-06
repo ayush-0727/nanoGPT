@@ -193,7 +193,7 @@ class GPT(nn.Module):
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
-        x = self.transformer.drop(tok_emb + pos_emb)
+        x = self.transformer.drop(tok_emb + pos_emb)    # (b, t, n_embd) where b is batch size, t is sequence length, n_embd is embedding dimension
         
         if not kvcache:
             kvcache = [None] * self.config.n_layer

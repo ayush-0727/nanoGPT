@@ -85,87 +85,87 @@ if start.startswith('FILE:'):
         start = f.read()
 start_ids = encode(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-
+    
 # run generation
-torch.cuda.reset_peak_memory_stats()
-with torch.no_grad():
-    with ctx:
-        torch.cuda.synchronize()
-        start = time.time_ns()
-        for k in range(num_samples):
-            y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            print(decode(y[0].tolist()))
-            print("\n\nGen length -", len(y[0].tolist()))
-            print('---------------')
-            torch.cuda.synchronize()
-            end = time.time_ns()
+# torch.cuda.reset_peak_memory_stats()
+# with torch.no_grad():
+#     with ctx:
+#         torch.cuda.synchronize()
+#         start = time.time_ns()
+#         for k in range(num_samples):
+#             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+#             print(decode(y[0].tolist()))
+#             print("\n\nGen length -", len(y[0].tolist()))
+#             print('---------------')
+#             torch.cuda.synchronize()
+#             end = time.time_ns()
 
-print(f'Time taken: {(end-start)/1_000_000}ms')
-peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
-print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
+# print(f'Time taken: {(end-start)/1_000_000}ms')
+# peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+# print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
 
 
 # ======== Measure inference time vs input length ========
 
-# base_prompt = "The quick brown fox jumps over the lazy dog. "
+base_prompt = "The quick brown fox jumps over the lazy dog. "
 
-# results = []
+results = []
 
-# torch.cuda.reset_peak_memory_stats()
+torch.cuda.reset_peak_memory_stats()
 
-# with torch.no_grad():
-#     with ctx:
-#         for k in [1, 5, 10, 20, 40, 80]:     # k controls input length
-#             start = base_prompt * k
-#             x = torch.tensor(encode(start), dtype=torch.long, device=device)[None, ...]
+with torch.no_grad():
+    with ctx:
+        for k in [1, 5, 10, 20, 40, 80]:     # k controls input length
+            start = base_prompt * k
+            x = torch.tensor(encode(start), dtype=torch.long, device=device)[None, ...]
             
-#             torch.cuda.synchronize()
-#             start_time = time.time()
+            torch.cuda.synchronize()
+            start_time = time.time()
 
-#             y = model.generate(
-#                 x,
-#                 max_new_tokens,
-#                 temperature=temperature,
-#                 top_k=top_k
-#             )
+            y = model.generate(
+                x,
+                max_new_tokens,
+                temperature=temperature,
+                top_k=top_k
+            )
 
-#             torch.cuda.synchronize()
-#             end_time = time.time()
+            torch.cuda.synchronize()
+            end_time = time.time()
             
-#             total_time = end_time - start_time
-#             num_generated_tokens = y.shape[1] - x.shape[1]
+            total_time = end_time - start_time
+            num_generated_tokens = y.shape[1] - x.shape[1]
             
-#             per_token_time = total_time / num_generated_tokens
+            per_token_time = total_time / num_generated_tokens
 
-#             results.append((len(x[0]), total_time, per_token_time))
+            results.append((len(x[0]), total_time, per_token_time))
     
-#             print(decode(y[0].tolist()))
-#             print('---------------')
+            print(decode(y[0].tolist()))
+            print('---------------')
 
-# peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
-# print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
-# print("\nInput Tokens | Total Time (s) | Time per Token (s)")
-# for input_len, total_t, per_token_t in results:
-#     print(f"{input_len:12} | {total_t:.4f}       | {per_token_t:.6f}")
+peak_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+print(f"Peak GPU memory usage: {peak_mem:.2f} GB")
+print("\nInput Tokens | Total Time (s) | Time per Token (s)")
+for input_len, total_t, per_token_t in results:
+    print(f"{input_len:12} | {total_t:.4f}       | {per_token_t:.6f}")
     
-# # plot the inference time vs input length
-# import matplotlib.pyplot as plt
-# input_lengths = [r[0] for r in results]
-# total_times = [r[1] for r in results]
-# per_token_times = [r[2] for r in results]
-# plt.figure(figsize=(12, 5))
-# plt.subplot(1, 2, 1)
-# plt.plot(input_lengths, total_times, marker='o')
-# plt.title('Total Inference Time vs Input Length')
-# plt.xlabel('Input Length (tokens)')
-# plt.ylabel('Total Inference Time (s)')
-# plt.subplot(1, 2, 2)
-# plt.plot(input_lengths, per_token_times, marker='o', color='orange')
-# plt.title('Per Token Inference Time vs Input Length')
-# plt.xlabel('Input Length (tokens)')
-# plt.ylabel('Per Token Inference Time (s)')
-# plt.tight_layout()
-# plt.savefig('inference_time_vs_input_length.png')
+# plot the inference time vs input length
+import matplotlib.pyplot as plt
+input_lengths = [r[0] for r in results]
+total_times = [r[1] for r in results]
+per_token_times = [r[2] for r in results]
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(input_lengths, total_times, marker='o')
+plt.title('Total Inference Time vs Input Length')
+plt.xlabel('Input Length (tokens)')
+plt.ylabel('Total Inference Time (s)')
+plt.subplot(1, 2, 2)
+plt.plot(input_lengths, per_token_times, marker='o', color='orange')
+plt.title('Per Token Inference Time vs Input Length')
+plt.xlabel('Input Length (tokens)')
+plt.ylabel('Per Token Inference Time (s)')
+plt.tight_layout()
+plt.savefig('inference_time_vs_input_length.png')
 
 # -----------------------------------------------------------------------------
 
