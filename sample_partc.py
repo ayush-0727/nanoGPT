@@ -120,6 +120,11 @@ with torch.no_grad():
             temperature=temperature,
             top_k=top_k,
         )
+        
+        for i, out in enumerate(output):
+            print(f"=== Sample {i+1} ===")
+            print(decode(out[0].tolist()))
+            print('---------------')
 
 end_time = time.time()
 print(f"Total time: {end_time - start_time:.2f}s")
