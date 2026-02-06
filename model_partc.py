@@ -484,7 +484,7 @@ class GPT(nn.Module):
             # compute KV for suffix
             if matched_len < len(tokens):
                 suffix = torch.tensor(
-                    tokens[matched_len:], device=device
+                    tokens[matched_len-1:], device=device
                 )[None, :]
 
                 _, new_kv = self(
