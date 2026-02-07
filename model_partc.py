@@ -547,6 +547,28 @@ class GPT(nn.Module):
             else:
                 kvcache = kv_prefix
 
+        
+        for prompt in batch_prompts:
+            tokens = prompt[0].tolist()
+
+            # Find shared prefix
+            matched_len, path = radix.find_longest_prefix(tokens)
+
+            if matched_len > 0:
+                kv_prefix = self._concat_kv([n.kv for n, _ in path])
+            else:
+                kv_prefix = None
+
+            # Process remaining suffix
+            suffix = tokens[matched_len:]
+            if suffix:
+                x = torch.tensor(suffix, device=prompt.device)[None, :]
+                logits, _, new_kv = self(x, kvcache=kv_prefix)
+                radix.insert(tokens, new_kv)
+                kvcache = new_kv
+            else:
+                kvcache = kv_prefix
+                    
             idx = prompt.clone()
 
             # Generate new tokens
