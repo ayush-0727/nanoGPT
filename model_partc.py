@@ -308,8 +308,8 @@ class GPT(nn.Module):
             # past length inferred from cache
             past_len = kvcache[0][0].size(1)
             # only process last token
-            idx = idx[:, -1:]
-            T = 1
+            idx = idx[:, past_len:T]
+            T = T-past_len
     
         # ------------------------------------------------------------------
         # Token + position embeddings
