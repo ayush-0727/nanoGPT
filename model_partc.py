@@ -309,12 +309,11 @@ class GPT(nn.Module):
             past_len = kvcache[0][0].size(1)
             # only process last token
             idx = idx[:, past_len:T]
-            T = T-past_len
     
         # ------------------------------------------------------------------
         # Token + position embeddings
         # ------------------------------------------------------------------
-        pos = torch.arange(past_len, past_len + T, device=device)
+        pos = torch.arange(past_len, T, device=device)
         tok_emb = self.transformer.wte(idx)              # (B, T, C)
         pos_emb = self.transformer.wpe(pos)[None, :, :]  # (1, T, C)
         x = tok_emb + pos_emb
