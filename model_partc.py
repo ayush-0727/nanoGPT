@@ -553,6 +553,7 @@ class GPT(nn.Module):
 
             # Find shared prefix
             matched_len, path = radix.find_longest_prefix(tokens)
+            print(f"\nmatched_len: {matched_len}, path length: {len(path)}")
 
             if matched_len > 0:
                 kv_prefix = self._concat_kv([n.kv for n, _ in path])
@@ -561,6 +562,7 @@ class GPT(nn.Module):
 
             # Process remaining suffix
             suffix = tokens[matched_len:]
+            print(f"suffix_len: {len(suffix)}")
             if suffix:
                 x = torch.tensor(suffix, device=prompt.device)[None, :]
                 logits, _, new_kv = self(x, kvcache=kv_prefix)
