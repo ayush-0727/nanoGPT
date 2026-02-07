@@ -43,7 +43,7 @@ a consistent narrative voice and avoid repeating the same phrases too often.
 The story should unfold naturally and creatively.
 """.strip()
 
-SYSTEM_PROMPT *= 2
+SYSTEM_PROMPT *= 4
 
 PROMPTS = [
     SYSTEM_PROMPT + "\n\nOnce upon a time in a distant kingdom, there lived a wise old king",
