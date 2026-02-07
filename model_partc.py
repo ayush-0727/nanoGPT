@@ -204,29 +204,29 @@ class RadixTree:
                 continue
 
             # split
-            split = RadixNode(child.tokens[p:])
+            split = RadixNode(child.tokens[p:]) 
             split.children = child.children
-            split.kv = self._slice_kv(child.kv, p)
+            split.kv = self._slice_kv(child.kv, p, len(child.tokens))
 
             child.tokens = child.tokens[:p]
             child.children = {split.tokens[0]: split}
-            child.kv = self._slice_kv(child.kv, 0)
+            child.kv = self._slice_kv(child.kv, 0, p)
 
             new = RadixNode(tokens[i+p:])
-            new.kv = self._slice_kv(kv, p)
+            new.kv = self._slice_kv(kv, p, len(tokens)-i)
             child.children[new.tokens[0]] = new
             return
 
         node.kv = kv
 
     @staticmethod
-    def _slice_kv(kv, start):
+    def _slice_kv(kv, start, end):
         """slice kv from start to end"""
         sliced = []
         for K, V in kv:
             sliced.append((
-                K[:, start:, :].contiguous(),
-                V[:, start:, :].contiguous()
+                K[:, start:end, :].contiguous(),
+                V[:, start:end, :].contiguous()
             ))
         return sliced
 
@@ -375,7 +375,7 @@ class GPT(nn.Module):
         }[model_type]
         print("forcing vocab_size=50257, block_size=1024, bias=True")
         config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
+        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints, what is block size? the context window size, i.e. the maximum sequence length that the model can attend to
         config_args['bias'] = True # always True for GPT model checkpoints
         # we can override the dropout rate, if desired
         if 'dropout' in override_args:
