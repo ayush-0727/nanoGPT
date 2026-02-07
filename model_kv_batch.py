@@ -363,7 +363,7 @@ class GPT(nn.Module):
                 # sample from the distribution
                 idx_next = torch.multinomial(probs, num_samples=1)
                 # append sampled index to the running sequence and continue
-                idx = torch.cat((idx, idx_next), dim=1)
+                prompt = torch.cat((prompt, idx_next), dim=1)
 
-            outputs.append(idx)
+            outputs.append(prompt)
         return outputs
