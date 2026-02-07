@@ -8,13 +8,13 @@ import torch
 import tiktoken
 import time
 
-from model_partc import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
 init_from = 'resume'
 out_dir = 'out'
 
 num_samples = 1
+use_radix_kvcache = False
 max_new_tokens = 200
 temperature = 0.8
 top_k = 200
@@ -25,6 +25,11 @@ compile = False
 exec(open('configurator.py').read())
 # -----------------------------------------------------------------------------
 
+if not use_radix_kvcache:
+    from model_kv_batch import GPTConfig, GPT
+else:
+    from model_partc import GPTConfig, GPT
+    
 # -----------------------------------------------------------------------------
 # Large shared system prompt (~150 tokens)
 # -----------------------------------------------------------------------------
