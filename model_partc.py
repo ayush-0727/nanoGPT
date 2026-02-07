@@ -285,7 +285,7 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None, kvcache=None):
+    def forward(self, idx, targets=None, kvcache=None, suffix=False):
         """
         idx: (B, T) token indices
         kvcache: list of (K, V) per layer or None
@@ -304,16 +304,19 @@ class GPT(nn.Module):
         if kvcache is None:
             kvcache = [None] * self.config.n_layer
             past_len = 0
-        else:
+        elif suffix:
             # past length inferred from cache
             past_len = kvcache[0][0].size(1)
+        else:
+            past_len = kvcache[0][0].size(1)
             # only process last token
-            idx = idx[:, past_len:T]
+            idx = idx[:, -1:]
+            T = 1
     
         # ------------------------------------------------------------------
         # Token + position embeddings
         # ------------------------------------------------------------------
-        pos = torch.arange(past_len, T, device=device)
+        pos = torch.arange(past_len, past_len + T, device=device)
         tok_emb = self.transformer.wte(idx)              # (B, T, C)
         pos_emb = self.transformer.wpe(pos)[None, :, :]  # (1, T, C)
         x = tok_emb + pos_emb
@@ -542,11 +545,8 @@ class GPT(nn.Module):
             print(f"suffix_len: {len(suffix)}")
             if suffix:
                 x = torch.tensor(suffix, device=prompt.device)[None, :]
-                logits, _, new_kv = self(x, kvcache=kv_prefix)
+                logits, _, new_kv = self(x, kvcache=kv_prefix, suffix=True)
                 radix.insert(tokens, new_kv)
-                kvcache = new_kv
-            else:
-                kvcache = kv_prefix
 
         
         for prompt in batch_prompts:
@@ -560,21 +560,12 @@ class GPT(nn.Module):
             else:
                 kv_prefix = None
 
-            # Process remaining suffix
-            suffix = tokens[matched_len:]
-            if suffix:
-                x = torch.tensor(suffix, device=prompt.device)[None, :]
-                logits, _, new_kv = self(x, kvcache=kv_prefix)
-                radix.insert(tokens, new_kv)
-                kvcache = new_kv
-            else:
-                kvcache = kv_prefix
-                    
+            kvcache = kv_prefix
             idx = prompt.clone()
 
             # Generate new tokens
             for _ in range(max_new_tokens):
-                logits, _, kvcache = self(idx[:, -1:], kvcache=kvcache)
+                logits, _, kvcache = self(idx[:, -1:], kvcache=kvcache, suffix=False)
                 logits = logits[:, -1, :] / temperature
 
                 if top_k is not None:
