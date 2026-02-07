@@ -26,7 +26,7 @@ exec(open('configurator.py').read())
 # -----------------------------------------------------------------------------
 
 if not use_radix_kvcache:
-    from model_kv_batch import GPTConfig, GPT
+    from model_batch import GPTConfig, GPT
 else:
     from model_partc import GPTConfig, GPT
     
